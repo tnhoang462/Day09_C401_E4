@@ -17,6 +17,10 @@ Gọi độc lập để test:
 
 import os
 import sys
+import dotenv
+
+dotenv.load_dotenv()
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
 # ─────────────────────────────────────────────
 # Worker Contract (xem contracts/worker_contracts.yaml)
