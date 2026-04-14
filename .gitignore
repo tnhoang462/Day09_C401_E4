@@ -7,5 +7,4 @@ day08/lab/data/grading_questions.json
 .venv
 chroma_db
 **/.env
-.env
 __pycache__
