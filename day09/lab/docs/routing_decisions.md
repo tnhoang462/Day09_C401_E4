@@ -42,7 +42,7 @@
 - confidence: 0.90
 - Correct routing? **Yes**
 
-**Nhận xét:** Routing đúng — câu hỏi cần tra policy refund nên phải qua policy_tool_worker với MCP search_kb. Điểm hay là supervisor nhận ra đồng thời 2 policy keywords (`hoàn tiền`, `flash sale`), route_reason rõ ràng. Kết quả synthesis trả lời dứt khoát với confidence cao (0.90) dù question có vẻ muốn tìm ngoại lệ.
+**Nhận xét:** Routing đúng — câu hỏi cần tra policy refund nên phải qua policy_tool_worker với MCP search_kb. Điểm hay là policy_tool_worker dùng luồng tư duy AI với `gpt-oss-120b` (thể hiện qua reasoning_content) nhằm phát hiện Exception vi phạm quy tắc Flash Sale, kết hợp lọc Rule-Based ban đầu. Kết quả synthesis trả lời dứt khoát với confidence cao (0.90) dù question có vẻ muốn tìm ngoại lệ.
 
 ---
 

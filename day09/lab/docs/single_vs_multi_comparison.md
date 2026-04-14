@@ -107,15 +107,15 @@ Trong lab, nhóm đã thêm tool `create_ticket` và `check_access_permission` v
 
 | Scenario | Day 08 calls | Day 09 calls |
 |---------|-------------|-------------|
-| Simple query (retrieval only) | 1 LLM call | 2 LLM calls (retrieval embed + synthesis) |
-| Complex query (policy + retrieval) | 1 LLM call | 3 LLM calls (embed + policy LLM + synthesis) |
-| MCP tool call | N/A | 1–2 MCP calls (search_kb, get_ticket_info) |
+| Simple query (retrieval only) | 1 LLM call | 2 LLM calls (retrieval embed + synthesis via OpenAI gpt-4o-mini / Gemini) |
+| Complex query (policy + retrieval) | 1 LLM call | 3 LLM calls (embed + NVIDIA gpt-oss-120b for Reasoning + synthesis) |
+| MCP tool call | N/A | 1–2 MCP calls (search_kb, get_ticket_info qua fallback an toàn) |
 
-> _Lưu ý: embedding call (SentenceTransformer) là local — không tốn API. LLM calls là gpt-4o-mini._
+> _Lưu ý: embedding call là local (SentenceTransformer). LLM Policy call là NVIDIA gpt-oss-120b. Synthesis là GPT/Gemini._
 
 **Nhận xét về cost-benefit:**
 
-Day 09 tốn ~2× số API calls so với Day 08 nhưng latency thực tế lại **thấp hơn** do: (1) mỗi call nhỏ hơn (context focused, không phải dump cả KB), (2) gpt-4o-mini fast inference. Confidence tăng 26% là trade-off xứng đáng. Với scale lớn (1000+ queries/ngày), chi phí MCP call cần monitor thêm.
+Day 09 tốn API calls cho nhiều mô hình khác biệt so với Day 08 nhưng latency thực tế lại **thấp hơn** do: (1) chuyên biệt hóa mô hình — `gpt-oss-120b` (NVIDIA) dùng chuyên để suy luận (Reasoning) exception, còn `gpt-4o-mini`/Gemini chuyên dùng để format text cuối (Synthesis) thay vì đẩy cục bự vào 1 prompt duy nhất; (2) `try-except` fallback an toàn gánh bớt request chết. Confidence tăng 26% là trade-off cực kỳ xứng đáng cho sự linh hoạt và Explainable AI (xem được luồng tư duy Reasoning).
 
 ---
 
