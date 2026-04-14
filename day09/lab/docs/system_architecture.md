@@ -41,19 +41,19 @@ User Request (task: str)
    ▼                              ▼                  ▼
 Retrieval Worker          Policy Tool Worker    Human Review
 (workers/retrieval.py)   (workers/policy_tool  (human_review_node)
-  Dense retrieval          .py) → MCP tools:     HITL placeholder
-  via ChromaDB             search_kb,            → auto-approve
-  (all-MiniLM-L6-v2)      get_ticket_info,       → re-routes to
-  top_k = 3               check_access_permi        retrieval_worker
-  → retrieved_chunks       ssion, create_ticket
-  → retrieved_sources     → policy_result
-        │                         │
+  Dense retrieval          .py) → NVIDIA LLM:     HITL placeholder
+  via ChromaDB             gpt-oss-120b (Reasoning)→ auto-approve
+  (all-MiniLM-L6-v2)      → MCP tools:           → re-routes to
+  top_k = 3               search_kb,                retrieval_worker
+  → retrieved_chunks       get_ticket_info,       
+  → retrieved_sources     check_access_permission
+        │                 → policy_result
         └───────────┬─────────────┘
                     │
                     ▼
            Synthesis Worker
           (workers/synthesis.py)
-           LLM: gpt-4o-mini
+           LLM: gpt-4o-mini / gemini-1.5-flash
            temperature: 0.1
            builds context from
            chunks + policy_result
@@ -93,15 +93,16 @@ Retrieval Worker          Policy Tool Worker    Human Review
 
 | Thuộc tính | Mô tả |
 |-----------|-------|
-| **Nhiệm vụ** | Xử lý câu hỏi liên quan đến policy/access control; gọi MCP tools để lấy evidence và kiểm tra quyền |
-| **MCP tools gọi** | `search_kb` (semantic search KB), `get_ticket_info` (tra cứu ticket Jira), `check_access_permission` (kiểm tra quyền theo SOP), `create_ticket` (mock) |
-| **Exception cases xử lý** | MCP call thất bại → fallback graceful (không crash); tool không hợp lệ → trả về error dict |
+| **Nhiệm vụ** | Xử lý câu hỏi liên quan đến policy/access control; hỗ trợ **Reasoning** thông qua NVIDIA API trước khi kết luận |
+| **LLM model** | `openai/gpt-oss-120b` (qua NVIDIA API) với cơ chế parse `reasoning_content` để Explainable AI |
+| **MCP tools gọi** | `search_kb` (semantic search KB), `get_ticket_info` (tra cứu ticket Jira), `check_access_permission` |
+| **Exception cases xử lý** | Rule-Based Exception Filter (phát hiện nhanh vi phạm như Flash Sale, Đã kích hoạt...); Fallback an toàn nếu MCP lỗi |
 
 ### Synthesis Worker (`workers/synthesis.py`)
 
 | Thuộc tính | Mô tả |
 |-----------|-------|
-| **LLM model** | `gpt-4o-mini` (OpenAI), fallback: `gemini-1.5-flash` (Google) |
+| **LLM model** | `gpt-4o-mini` (OpenAI), hoặc `gemini-1.5-flash` (Google) linh hoạt theo cấu hình `.env` |
 | **Temperature** | 0.1 (low — grounded, tránh hallucination) |
 | **Grounding strategy** | Chỉ dùng `retrieved_chunks` + `policy_result` làm context; KHÔNG dùng kiến thức ngoài; citation [1],[2],... bắt buộc |
 | **Abstain condition** | Nếu answer chứa "không tìm thấy" / "không có thông tin" → confidence 0.2; nếu không có chunks lẫn policy → confidence 0.1 |
