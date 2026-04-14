@@ -17,17 +17,47 @@ Gọi độc lập để test:
 """
 
 import os
-
+from dotenv import load_dotenv
+load_dotenv()
 WORKER_NAME = "synthesis_worker"
 
-SYSTEM_PROMPT = """Bạn là trợ lý IT Helpdesk nội bộ.
+SYSTEM_PROMPT = """
+<role>
+Bạn là Synthesis Worker — một agent chuyên tổng hợp câu trả lời từ Knowledge Base nội bộ cho IT Helpdesk.
+</role>
 
-Quy tắc nghiêm ngặt:
-1. CHỈ trả lời dựa vào context được cung cấp. KHÔNG dùng kiến thức ngoài.
-2. Nếu context không đủ để trả lời → nói rõ "Không đủ thông tin trong tài liệu nội bộ".
-3. Trích dẫn nguồn cuối mỗi câu quan trọng: [tên_file].
-4. Trả lời súc tích, có cấu trúc. Không dài dòng.
-5. Nếu có exceptions/ngoại lệ → nêu rõ ràng trước khi kết luận.
+<rule>
+- Tổng hợp retrieved_chunks + policy_result thành câu trả lời cuối
+- Trích dẫn nguồn chính xác sau mỗi thông tin quan trọng
+</rule>
+
+<language_rule>
+- Luôn trả lời bằng tiếng Việt
+- Tone chuyên nghiệp, trực tiếp, không dài dòng
+</language_rule>
+
+
+<response_format>
+Khi tổng hợp câu trả lời, luôn trình bày theo format:
+Answer:
+[3-5 dòng giải thích với citation [1], [2], ...]
+
+</response_format>
+
+<behavior>
+- Ưu tiên chunks có score cao (>0.85)
+</behavior>
+
+<constraints>
+- CHỈ trả lời dựa vào context được cung cấp. KHÔNG dùng kiến thức ngoài.
+- KHÔNG dùng "tôi nghĩ", "có thể", "theo kinh nghiệm của tôi"
+- Không thêm bình luận cá nhân
+
+</constraints>
+
+<validation_checklist>
+✓ Citation rõ ràng [1], [2], ...
+</validation_checklist>
 """
 
 
@@ -66,26 +96,50 @@ def _call_llm(messages: list) -> str:
 
 
 def _build_context(chunks: list, policy_result: dict) -> str:
-    """Xây dựng context string từ chunks và policy result."""
+    """
+    Xây dựng context string từ chunks và policy result.
+    Tổng hợp cả evidence từ Knowledge Base và các quy định từ Policy Worker.
+    """
     parts = []
 
+    # 1. Thêm các đoạn văn bản tìm được (Retrieval)
     if chunks:
-        parts.append("=== TÀI LIỆU THAM KHẢO ===")
+        parts.append("=== TÀI LIỆU THAM KHẢO (EVIDENCE) ===")
         for i, chunk in enumerate(chunks, 1):
             source = chunk.get("source", "unknown")
             text = chunk.get("text", "")
             score = chunk.get("score", 0)
-            parts.append(f"[{i}] Nguồn: {source} (relevance: {score:.2f})\n{text}")
+            parts.append(f"[{i}] Nguồn: {source} (độ liên quan: {score:.2f})\n{text}")
 
-    if policy_result and policy_result.get("exceptions_found"):
-        parts.append("\n=== POLICY EXCEPTIONS ===")
-        for ex in policy_result["exceptions_found"]:
-            parts.append(f"- {ex.get('rule', '')}")
+    # 2. Thêm thông tin Policy (nếu có)
+    if policy_result:
+        parts.append("\n=== QUY ĐỊNH & CHÍNH SÁCH (POLICY) ===")
+        
+        # Tên policy và rule chung
+        p_name = policy_result.get("policy_name", "N/A")
+        p_rule = policy_result.get("rule", "N/A")
+        if p_name != "N/A":
+            parts.append(f"Chính sách áp dụng: {p_name}")
+        if p_rule != "N/A":
+            parts.append(f"Quy tắc chung: {p_rule}")
+
+        # Các ngoại lệ (Exceptions) - Rất quan trọng cho Synthesis
+        exceptions = policy_result.get("exceptions_found", [])
+        if exceptions:
+            parts.append("\nCÁC NGOẠI LỆ PHÁT HIỆN:")
+            for ex in exceptions:
+                # ex có thể là string hoặc dict tùy vào implement của Policy Worker
+                if isinstance(ex, dict):
+                    rule_text = ex.get("rule") or ex.get("text") or str(ex)
+                    parts.append(f"- {rule_text}")
+                else:
+                    parts.append(f"- {ex}")
 
     if not parts:
-        return "(Không có context)"
+        return "(Không tìm thấy dữ liệu liên quan trong hệ thống)"
 
     return "\n\n".join(parts)
+
 
 
 def _estimate_confidence(chunks: list, answer: str, policy_result: dict) -> float:
@@ -97,23 +151,23 @@ def _estimate_confidence(chunks: list, answer: str, policy_result: dict) -> floa
 
     TODO Sprint 2: Có thể dùng LLM-as-Judge để tính confidence chính xác hơn.
     """
-    if not chunks:
-        return 0.1  # Không có evidence → low confidence
-
-    if "Không đủ thông tin" in answer or "không có trong tài liệu" in answer.lower():
-        return 0.3  # Abstain → moderate-low
-
-    # Weighted average của chunk scores
+    if not chunks and not policy_result.get("exceptions_found"):
+        return 0.1
+    
+    # Nếu câu trả lời thừa nhận không biết
+    abstain_keywords = ["không tìm thấy", "không có thông tin", "không rõ", "xin lỗi"]
+    if any(kw in answer.lower() for kw in abstain_keywords):
+        return 0.2
+    # Tính score trung bình của các chunks
     if chunks:
-        avg_score = sum(c.get("score", 0) for c in chunks) / len(chunks)
+        avg_chunk_score = sum(c.get("score", 0) for c in chunks) / len(chunks)
     else:
-        avg_score = 0
-
-    # Penalty nếu có exceptions (phức tạp hơn)
-    exception_penalty = 0.05 * len(policy_result.get("exceptions_found", []))
-
-    confidence = min(0.95, avg_score - exception_penalty)
-    return round(max(0.1, confidence), 2)
+        avg_chunk_score = 0.5 # Mặc định nếu chỉ có policy
+    # Kiểm tra xem có trích dẫn [x] trong câu trả lời không
+    has_citation = "[" in answer and "]" in answer
+    citation_bonus = 0.2 if has_citation else 0.0
+    confidence = avg_chunk_score + citation_bonus
+    return round(min(0.95, max(0.1, confidence)), 2)
 
 
 def synthesize(task: str, chunks: list, policy_result: dict) -> dict:
@@ -132,9 +186,9 @@ def synthesize(task: str, chunks: list, policy_result: dict) -> dict:
             "role": "user",
             "content": f"""Câu hỏi: {task}
 
-{context}
+    {context}
 
-Hãy trả lời câu hỏi dựa vào tài liệu trên."""
+    Hãy trả lời câu hỏi dựa vào tài liệu trên."""
         }
     ]
 
@@ -241,6 +295,7 @@ if __name__ == "__main__":
     }
     result2 = run(test_state2.copy())
     print(f"\nAnswer:\n{result2['final_answer']}")
+    print(f"\nSources: {result2['sources']}")
     print(f"Confidence: {result2['confidence']}")
 
     print("\n✅ synthesis_worker test done.")
