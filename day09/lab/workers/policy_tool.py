@@ -206,13 +206,38 @@ if __name__ == "__main__":
     print("Policy Tool Worker — Standalone Test")
     print("=" * 50)
 
-    test_case = {
-        "task": "Khách hàng Flash Sale muốn hoàn tiền.",
-        "retrieved_chunks": [{"text": "Sản phẩm Flash Sale không được hoàn tiền.", "source": "docs.txt"}],
-        "needs_tool": True
-    }
-    
-    result = run(test_case)
-    print(f"\nResult Policy Applies: {result['policy_result']['policy_applies']}")
-    print(f"Explanation: {result['policy_result']['explanation']}")
-    print(f"MCP Calls: {len(result.get('mcp_tools_used', []))}")
+    test_cases = [
+        {
+            "task": "Khách hàng Flash Sale yêu cầu hoàn tiền vì sản phẩm lỗi — được không?",
+            "retrieved_chunks": [
+                {"text": "Ngoại lệ: Đơn hàng Flash Sale không được hoàn tiền.", "source": "policy_refund_v4.txt", "score": 0.9}
+            ],
+            "needs_tool": True
+        },
+        {
+            "task": "Khách hàng muốn hoàn tiền license key đã kích hoạt.",
+            "retrieved_chunks": [
+                {"text": "Sản phẩm kỹ thuật số (license key, subscription) không được hoàn tiền.", "source": "policy_refund_v4.txt", "score": 0.88}
+            ],
+            "needs_tool": True
+        },
+        {
+            "task": "Khách hàng yêu cầu hoàn tiền trong 5 ngày, sản phẩm lỗi, chưa kích hoạt.",
+            "retrieved_chunks": [
+                {"text": "Yêu cầu trong 7 ngày làm việc, sản phẩm lỗi nhà sản xuất, chưa dùng.", "source": "policy_refund_v4.txt", "score": 0.85}
+            ],
+            "needs_tool": True
+        },
+    ]
+
+    for tc in test_cases:
+        print(f"\n▶ Task: {tc['task'][:70]}...")
+        result = run(tc.copy())
+        pr = result.get("policy_result", {})
+        print(f"  policy_applies: {pr.get('policy_applies')}")
+        if pr.get("exceptions_found"):
+            for ex in pr["exceptions_found"]:
+                print(f"  exception: {ex['type']} — {ex['rule'][:60]}...")
+        print(f"  MCP calls: {len(result.get('mcp_tools_used', []))}")
+
+    print("\n✅ policy_tool_worker test done.")
