@@ -7,7 +7,7 @@
 | Trương Đặng Gia Huy | Supervisor Owner | (trống) |
 | Nguyễn Ngọc Thắng | Worker Owner (Retrieval) | (trống) |
 | Nguyễn Xuân Mong | Worker Owner (Policy Tool & AI) | xuanmongng@gmail.com |
-| Trần Minh Toàn | Worker Owner (Synthesis) | (trống) |
+| Trần Minh Toàn | Worker Owner (Synthesis) | tranminhtoan140601@gmail.com |
 | Phạm Đỗ Ngọc Minh | MCP Owner | minhhppham10@gmail.com |
 | Trần Nhật Hoàng | Trace & Docs Owner | tnhoang462@gmail.com |
 | Lê Quý Công | Trace & Eval Owner | (trống) |
