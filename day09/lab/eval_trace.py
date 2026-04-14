@@ -10,7 +10,7 @@ Chạy:
 
 Outputs:
     artifacts/traces/          — trace của từng câu hỏi
-    artifacts/grading_run.jsonl — log câu hỏi chấm điểm
+    artifacts/grading_run.json — log câu hỏi chấm điểm
     artifacts/eval_report.json  — báo cáo tổng kết
 """
 
@@ -252,11 +252,11 @@ def compare_single_vs_multi(
     # TODO: Load Day 08 results nếu có
     # Nếu không có, dùng baseline giả lập để format
     day08_baseline = {
-        "total_questions": 15,
-        "avg_confidence": 0.0,          # TODO: Điền từ Day 08 eval.py
-        "avg_latency_ms": 0,            # TODO: Điền từ Day 08
-        "abstain_rate": "?",            # TODO: Điền từ Day 08
-        "multi_hop_accuracy": "?",      # TODO: Điền từ Day 08
+        "total_questions": 10,
+        "avg_confidence": 0.568,          
+        "avg_latency_ms": 10552,            
+        "abstain_rate": 0.1,            
+        "multi_hop_accuracy": 0.0,      
     }
 
     if day08_results_file and os.path.exists(day08_results_file):
