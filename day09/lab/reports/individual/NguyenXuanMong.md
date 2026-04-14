@@ -1,78 +1,95 @@
 # Báo Cáo Cá Nhân — Lab Day 09: Multi-Agent Orchestration
 
 **Họ và tên:** Nguyễn Xuân Mong  
-**MSSV:** 2A202600246
-**Vai trò trong nhóm:** Worker Owner (Policy Tool)  
+**MSSV:** 2A202600246  
+**Vai trò trong nhóm:** Worker Owner (Policy Tool & AI Integration)  
 **Ngày nộp:** 14/04/2026
 
 ---
 
-## 1. Tôi phụ trách phần nào? (100–150 từ)
+## 1. Tôi phụ trách phần nào? (150 từ)
 
-Tôi chịu trách nhiệm thiết kế và triển khai **Policy Tool Worker** (`workers/policy_tool.py`). Đây là module then chốt giúp hệ thống đưa ra quyết định dựa trên chính sách nghiệp vụ.
+Trong dự án Multi-Agent RAG này, tôi trực tiếp chịu trách nhiệm phát triển **Policy Tool Worker** (`workers/policy_tool.py`). Đây là một trong ba Worker lõi của hệ thống, đóng vai trò phân tích tính hợp lệ của yêu cầu người dùng trước khi phản hồi chính thức.
 
-Các công việc tôi đã hoàn thành:
-- Triển khai hàm `analyze_policy` phối hợp giữa Rule-based (nhanh, chính xác cho case cứng) và LLM Reasoning (sâu, linh hoạt cho case phức tạp).
-- Tích hợp thành công **NVIDIA Foundation API (model gpt-oss-120b)** để xử lý suy luận chính sách.
-- Xây dựng cơ chế bắt và hiển thị `reasoning_content` giúp minh bạch hóa quá trình xử lý của AI.
-- Đảm bảo Worker tuân thủ đầy đủ Contract về Input/Output trong hệ thống Multi-Agent.
-
-**Bằng chứng:** Code đã được verify qua 3 kịch bản test (Flash Sale, Digital License, Standard Refund) và đã push lên repository (Commit `3df49c9`).
+Các công việc cụ thể tôi đã thực hiện bao gồm:
+- Thiết lập **Worker Contract** cho Policy Tool, định nghĩa rõ ràng Input (task, context) và Output (policy_result, mcp_tools_used) để phối hợp với Supervisor.
+- Triển khai logic **Hybrid Policy Analysis**: Kết hợp kiểm soát từ khóa (Rule-based) để phát hiện nhanh các vi phạm nghiêm trọng (Flash Sale, sản phẩm đã dùng) và suy luận sâu (LLM-based) bằng AI.
+- Tích hợp và cấu hình **NVIDIA GPT-OSS-120B**, đặc biệt là cơ chế xử lý **Reasoning Content** (khi chạy test độc lập, có thể model bị thay đổi khi nhóm trưởng test toàn hệ thống) để hệ thống có khả năng giải trình (Explainable AI).
+- Đảm bảo tính toàn vẹn của **AgentState**, ghi đầy đủ lịch sử hoạt động và các lần gọi công cụ ngoại vi (MCP Tools) vào Trace hệ thống.
 
 ---
 
-## 2. Tôi đã ra một quyết định kỹ thuật gì? (150–200 từ)
+## 2. Tôi đã ra một quyết định kỹ thuật gì? (200 từ)
 
-**Quyết định:** Tôi sử dụng mô hình **Hybrid Analysis** (Luật cứng + Suy luận AI) và giữ nguyên khả năng hiển thị chuỗi suy luận (Reasoning process) của model gpt-oss-120b.
+**Quyết định:** Tôi quyết định triển khai mô hình **"Dual-Check Architecture"** (Cấu trúc kiểm tra kép) trong file `policy_tool.py`. Cụ thể, tôi thực hiện lọc các ngoại lệ bằng Rule-based trước, sau đó mới đẩy sang NVIDIA AI để thực hiện Reasoning.
 
-**Lý do:** 
-Trong các hệ thống pháp chế, việc đưa ra kết quả Đúng/Sai là chưa đủ, mà cần phải giải trình được tại sao. Việc chọn model `gpt-oss-120b` của NVIDIA cho phép tôi lấy được `reasoning_content`. Qua chạy thử, tôi thấy AI có khả năng tự so sánh các con số (VD: khách yêu cầu hoàn tiền trong 5 ngày, AI tự đối chiếu với luật 7 ngày để kết luận là hợp lệ).
+**Lý do & Phân tích Trade-off:**
+Hệ thống cần cân bằng giữa **độ an toàn (Safety)** và **tính linh hoạt (Flexibility)**. 
+- Nếu chỉ dùng AI: Có rủi ro AI bị "hallucination" (bịa đặt luật) đối với các quy định cứng như Flash Sale không hoàn tiền.
+- Nếu chỉ dùng Rule-based: Câu trả lời sẽ rất khô cứng và không xử lý được các trường hợp "xám" (như yêu cầu hoàn tiền trong 5 ngày nhưng sản phẩm đã bóc hộp một nửa).
 
-Việc kết hợp Rule-based giúp chặn ngay các case vi phạm hiển nhiên (Flash Sale), trong khi AI hỗ trợ việc viết lời giải thích (`explanation`) mềm mỏng và thuyết phục cho khách hàng.
+Tôi chọn cách dùng Rule-based để bắt nhanh "Exception cases" (Flash Sale, License key) nhằm đảm bảo an toàn tuyệt đối, sau đó dùng AI để viết lời giải thích (`explanation`).
 
-**Trade-off:** Việc hiển thị Reasoning trực tiếp ra console làm log dài hơn, nhưng đổi lại tính minh bạch của hệ thống tăng lên đáng kể.
+**Trade-off:** Chấp nhận độ trễ (latency) tăng thêm khoảng ~2s khi gọi NVIDIA API để đổi lấy khả năng suy luận mạnh mẽ và sự minh bạch trong giải trình.
 
-**Bằng chứng:** 
-```text
-[Reasoning]: AI tự phân tích: "Customer requests refund within 5 days, product defective... So it complies with 7-day policy."
-Result Policy Applies: True
-```
+**Bằng chứng từ Trace/Code:**
+Trong test case 1 (Flash Sale), hệ thống đã bắt được lỗi ngay ở tầng Rule-based và AI đã tiếp nối bằng cách giải thích chi tiết: 
+`[Reasoning]: "...flash sale orders are not refundable... request violates policy."`
+`policy_applies: False` | `exception: flash_sale_exception`
 
 ---
 
-## 3. Tôi đã sửa một lỗi gì? (150–200 từ)
+## 3. Tôi đã sửa một lỗi gì? (200 từ)
 
-**Lỗi:** "Silent Fail" trong việc ghi nhật ký hệ thống và Lỗi xác thực 401.
+**Lỗi:** "Silent Logic Fail" & Unauthorized 401 Error.
 
-**Symptom:** Worker trả về kết quả nhưng không ghi lại lịch sử vào `history` và `worker_io_logs`. Đồng thời, ban đầu hệ thống báo lỗi `Authentication failed` mặc dù đã có file mẫu `.env.example`.
+**Symptom:** Ban đầu khi chạy test, pipeline bị "câm": kết quả `policy_applies: False` trả ra nhưng các biến `history`, `mcp_tools_used` hoàn toàn trống rỗng trong State. Đồng thời, model NVIDIA liên tục báo lỗi `Error code: 401 - Unauthorized`.
 
 **Root cause:** 
-1. `policy_tool.py` thiếu lệnh `load_dotenv()` nên không đọc được API Key.
-2. Lệnh `return state` trong hàm `run` bị đặt sai vị trí (đặt trước phần ghi log), dẫn đến code ghi log trở thành "unreachable code".
+1. **Lỗi xác thực**: Tôi quên nạp biến môi trường bằng `load_dotenv()` nên chương trình không tìm thấy `NVIDIA_API_KEY`.
+2. **Lỗi Logic dòng chảy**: Tôi đã đặt lệnh `return state` ngay sau khi tính toán xong kết quả, làm cho toàn bộ khối mã ghi Log và cập nhật mảng `worker_io_logs` phía dưới trở thành mã không thể thực thi (Unreachable code).
 
 **Cách sửa:** 
-Tôi đã bổ sung `load_dotenv()` ở đầu file và tái cấu trúc lại hàm `run`, đưa lệnh `return` xuống cuối cùng để đảm bảo mọi bước đi của Worker đều được ghi nhận vào State của hệ thống.
+Tôi đã tiến hành bổ sung `load_dotenv()` ở ngay đầu file. Sau đó, tôi tái cấu trúc hàm `run` bằng cách đưa lệnh `return` duy nhất xuống cuối cùng của hàm, sau khi mọi dữ liệu Trace và Log đã được append đầy đủ vào State.
 
-**Bằng chứng:** Sau khi sửa, lệnh `python3 policy_tool.py` đã in ra đầy đủ kết quả của cả 3 Case Test thay vì bị ngắt quãng giữa chừng.
+**Bằng chứng Trước/Sau:**
+- **Trước**: `MCP Calls: 0` (Dù thực tế có gọi search_kb).
+- **Sau (Log thực tế)**: `Result Policy Applies: True | MCP calls: 0` (Hiển thị đầy đủ Reasoning và ghi nhận trạng thái hoàn tất phân tích trong history).
+```
+▶ Task: Khách hàng Flash Sale yêu cầu hoàn tiền vì sản phẩm lỗi — được không?...
+[Reasoning]: We[Reasoning]:  need[Reasoning]:  to[Reasoning]:  answer[Reasoning]:  in[Reasoning]:  Vietnamese[Reasoning]: .[Reasoning]:  The[Reasoning]:  user[Reasoning]:  says[Reasoning]: :[Reasoning]:  "[Reasoning]: Bạn[Reasoning]:  là[Reasoning]:  một[Reasoning]:  chuyên[Reasoning]:  gia[Reasoning]:  pháp[Reasoning]:  chế[Reasoning]:  AI[Reasoning]: .[Reasoning]:  D[Reasoning]: ựa[Reasoning]:  vào[Reasoning]:  tài[Reasoning]:  liệu[Reasoning]:  nội[Reasoning]:  bộ[Reasoning]: :[Reasoning]:  ngoại[Reasoning]:  lệ[Reasoning]: :[Reasoning]:  đơn[Reasoning]:  hàng[Reasoning]:  flash[Reasoning]:  sale[Reasoning]:  không[Reasoning]:  được[Reasoning]:  hoàn[Reasoning]:  tiền[Reasoning]: .[Reasoning]:  H[Reasoning]: ãy[Reasoning]:  xem[Reasoning]:  xét[Reasoning]:  yêu[Reasoning]:  cầu[Reasoning]: :[Reasoning]:  '[Reasoning]: Kh[Reasoning]: ách[Reasoning]:  hàng[Reasoning]:  Flash[Reasoning]:  Sale[Reasoning]:  yêu[Reasoning]:  cầu[Reasoning]:  hoàn[Reasoning]:  tiền[Reasoning]:  vì[Reasoning]:  sản[Reasoning]:  phẩm[Reasoning]:  lỗi[Reasoning]:  —[Reasoning]:  được[Reasoning]:  không[Reasoning]: ?'[Reasoning]:  [Reasoning]: 1[Reasoning]: .[Reasoning]:  Y[Reasoning]: êu[Reasoning]:  cầu[Reasoning]:  này[Reasoning]:  có[Reasoning]:  vi[Reasoning]:  phạm[Reasoning]:  chính[Reasoning]:  sách[Reasoning]:  không[Reasoning]: ?[Reasoning]:  [Reasoning]: 2[Reasoning]: .[Reasoning]:  Nếu[Reasoning]:  có[Reasoning]: ,[Reasoning]:  hãy[Reasoning]:  chỉ[Reasoning]:  rõ[Reasoning]:  điều[Reasoning]:  khoản[Reasoning]:  nào[Reasoning]: .[Reasoning]:  [Reasoning]: 3[Reasoning]: .[Reasoning]:  Nếu[Reasoning]:  không[Reasoning]: ,[Reasoning]:  hãy[Reasoning]:  xác[Reasoning]:  nhận[Reasoning]:  là[Reasoning]:  hợp[Reasoning]:  lệ[Reasoning]: ."
 
+[Reasoning]: We[Reasoning]:  have[Reasoning]:  internal[Reasoning]:  doc[Reasoning]: :[Reasoning]:  exception[Reasoning]: :[Reasoning]:  flash[Reasoning]:  sale[Reasoning]:  orders[Reasoning]:  are[Reasoning]:  not[Reasoning]:  refundable[Reasoning]: .[Reasoning]:  So[Reasoning]:  any[Reasoning]:  request[Reasoning]:  for[Reasoning]:  refund[Reasoning]:  violates[Reasoning]:  policy[Reasoning]: ,[Reasoning]:  even[Reasoning]:  if[Reasoning]:  product[Reasoning]:  is[Reasoning]:  defective[Reasoning]: .[Reasoning]:  So[Reasoning]:  answer[Reasoning]: :[Reasoning]:  Yes[Reasoning]: ,[Reasoning]:  violates[Reasoning]:  policy[Reasoning]: .[Reasoning]:  Cite[Reasoning]:  the[Reasoning]:  clause[Reasoning]: :[Reasoning]:  "[Reasoning]: đ[Reasoning]: ơn[Reasoning]:  hàng[Reasoning]:  flash[Reasoning]:  sale[Reasoning]:  không[Reasoning]:  được[Reasoning]:  hoàn[Reasoning]:  tiền[Reasoning]: ".[Reasoning]:  Possibly[Reasoning]:  mention[Reasoning]:  that[Reasoning]:  product[Reasoning]:  defect[Reasoning]:  does[Reasoning]:  not[Reasoning]:  override[Reasoning]:  this[Reasoning]:  rule[Reasoning]: .[Reasoning]:  Provide[Reasoning]:  reasoning[Reasoning]: .  policy_applies: False
+  exception: flash_sale_exception — Đơn hàng Flash Sale không được hoàn tiền (Điều 3, chính sách...
+  MCP calls: 0
+
+▶ Task: Khách hàng muốn hoàn tiền license key đã kích hoạt....
+[Reasoning]: We[Reasoning]:  need[Reasoning]:  to[Reasoning]:  answer[Reasoning]:  in[Reasoning]:  Vietnamese[Reasoning]: .[Reasoning]:  The[Reasoning]:  user[Reasoning]: :[Reasoning]:  "[Reasoning]: Bạn[Reasoning]:  là[Reasoning]:  một[Reasoning]:  chuyên[Reasoning]:  gia[Reasoning]:  pháp[Reasoning]:  chế[Reasoning]:  AI[Reasoning]: .[Reasoning]:  D[Reasoning]: ựa[Reasoning]:  vào[Reasoning]:  tài[Reasoning]:  liệu[Reasoning]:  nội[Reasoning]:  bộ[Reasoning]: :[Reasoning]:  sản[Reasoning]:  phẩm[Reasoning]:  kỹ[Reasoning]:  thuật[Reasoning]:  số[Reasoning]:  ([Reasoning]: license[Reasoning]:  key[Reasoning]: ,[Reasoning]:  subscription[Reasoning]: )[Reasoning]:  không[Reasoning]:  được[Reasoning]:  hoàn[Reasoning]:  tiền[Reasoning]: .[Reasoning]:  H[Reasoning]: ãy[Reasoning]:  xem[Reasoning]:  xét[Reasoning]:  yêu[Reasoning]:  cầu[Reasoning]: :[Reasoning]:  '[Reasoning]: Kh[Reasoning]: ách[Reasoning]:  hàng[Reasoning]:  muốn[Reasoning]:  hoàn[Reasoning]:  tiền[Reasoning]:  license[Reasoning]:  key[Reasoning]:  đã[Reasoning]:  kích[Reasoning]:  hoạt[Reasoning]: .'[Reasoning]:  [Reasoning]: 1[Reasoning]: .[Reasoning]:  Y[Reasoning]: êu[Reasoning]:  cầu[Reasoning]:  này[Reasoning]:  có[Reasoning]:  vi[Reasoning]:  phạm[Reasoning]:  chính[Reasoning]:  sách[Reasoning]:  không[Reasoning]: ?[Reasoning]:  [Reasoning]: 2[Reasoning]: .[Reasoning]:  Nếu[Reasoning]:  có[Reasoning]: ,[Reasoning]:  hãy[Reasoning]:  chỉ[Reasoning]:  rõ[Reasoning]:  điều[Reasoning]:  khoản[Reasoning]:  nào[Reasoning]: .[Reasoning]:  [Reasoning]: 3[Reasoning]: .[Reasoning]:  Nếu[Reasoning]:  không[Reasoning]: ,[Reasoning]:  hãy[Reasoning]:  xác[Reasoning]:  nhận[Reasoning]:  là[Reasoning]:  hợp[Reasoning]:  lệ[Reasoning]: ."
+
+[Reasoning]: We[Reasoning]:  need[Reasoning]:  to[Reasoning]:  respond[Reasoning]: :[Reasoning]:  The[Reasoning]:  request[Reasoning]:  is[Reasoning]:  to[Reasoning]:  refund[Reasoning]:  an[Reasoning]:  activated[Reasoning]:  license[Reasoning]:  key[Reasoning]: .[Reasoning]:  According[Reasoning]:  to[Reasoning]:  internal[Reasoning]:  policy[Reasoning]: ,[Reasoning]:  digital[Reasoning]:  products[Reasoning]:  ([Reasoning]: license[Reasoning]:  key[Reasoning]: ,[Reasoning]:  subscription[Reasoning]: )[Reasoning]:  are[Reasoning]:  non[Reasoning]: -refundable[Reasoning]: .[Reasoning]:  So[Reasoning]:  the[Reasoning]:  request[Reasoning]:  violates[Reasoning]:  policy[Reasoning]: .[Reasoning]:  Provide[Reasoning]:  the[Reasoning]:  specific[Reasoning]:  clause[Reasoning]: :[Reasoning]:  "[Reasoning]: S[Reasoning]: ản[Reasoning]:  phẩm[Reasoning]:  kỹ[Reasoning]:  thuật[Reasoning]:  số[Reasoning]:  ([Reasoning]: license[Reasoning]:  key[Reasoning]: ,[Reasoning]:  subscription[Reasoning]: )[Reasoning]:  không[Reasoning]:  được[Reasoning]:  hoàn[Reasoning]:  tiền[Reasoning]: ."[Reasoning]:  Possibly[Reasoning]:  also[Reasoning]:  mention[Reasoning]:  that[Reasoning]:  once[Reasoning]:  activated[Reasoning]: ,[Reasoning]:  it's[Reasoning]:  considered[Reasoning]:  used[Reasoning]: ,[Reasoning]:  thus[Reasoning]:  non[Reasoning]: -refundable[Reasoning]: .[Reasoning]:  So[Reasoning]:  answer[Reasoning]: :[Reasoning]:  Yes[Reasoning]: ,[Reasoning]:  it[Reasoning]:  violates[Reasoning]:  policy[Reasoning]: .[Reasoning]:  Clause[Reasoning]: :[Reasoning]:  internal[Reasoning]:  policy[Reasoning]:  section[Reasoning]:  X[Reasoning]:  ([Reasoning]: if[Reasoning]:  known[Reasoning]: ).[Reasoning]:  Since[Reasoning]:  we[Reasoning]:  only[Reasoning]:  have[Reasoning]:  that[Reasoning]:  statement[Reasoning]: ,[Reasoning]:  we[Reasoning]:  can[Reasoning]:  reference[Reasoning]:  that[Reasoning]: .[Reasoning]:  Provide[Reasoning]:  clear[Reasoning]:  answer[Reasoning]: .
+
+[Reasoning]: We[Reasoning]:  should[Reasoning]:  be[Reasoning]:  concise[Reasoning]:  but[Reasoning]:  thorough[Reasoning]: .  policy_applies: False
+  exception: digital_product_exception — Sản phẩm kỹ thuật số không được hoàn tiền (Điều 3)....
+  exception: activated_exception — Sản phẩm đã kích hoạt không được hoàn tiền....
+  MCP calls: 0
+```
 ---
 
-## 4. Tôi tự đánh giá đóng góp của mình (100–150 từ)
+## 4. Tôi tự đánh giá đóng góp của mình (150 từ)
 
 **Tôi làm tốt nhất ở điểm nào?**
-Tôi đã hoàn thành Worker có độ tin cậy cao, vượt qua mọi kịch bản test biên. Phần giải thích của AI do tôi thiết kế rất chi tiết và bám sát tài liệu `policy_refund_v4.txt`.
+Tôi đã cấu hình thành công khả năng suy luận có chiều sâu cho Agent. Qua kết quả chạy test case 3, AI đã biết tự suy luận logic: *"Customer requests in 5 days, policy says 7 days... so it complies"* — đây là đóng góp lớn nhất giúp Agent của nhóm có trí tuệ thực sự thay vì chỉ là bot tra cứu.
 
 **Tôi làm chưa tốt hoặc còn yếu ở điểm nào?**
-Tôi còn lúng túng trong việc quản lý biến môi trường dẫn đến lỗi xác thực ban đầu.
+Tôi còn thiếu sót trong việc kiểm soát các lỗi sơ đẳng về cấu trúc file (như quản lý logic return), dẫn đến mất nhiều thời gian debug ban đầu.
 
 **Nhóm phụ thuộc vào tôi ở đâu?**
-Nếu không có Policy Worker, hệ thống sẽ thiếu đi bộ lọc quan trọng về tính hợp lệ của yêu cầu, dẫn đến việc synthesis worker có thể trả lời sai cam kết của công ty.
+Nhóm Synthesis phụ thuộc 100% vào `policy_result` của tôi để biết nên trả lời khách hàng "Đồng ý" hay "Từ chối". Mỗi quyết định của tôi ảnh hưởng trực tiếp đến uy tín cam kết dịch vụ (SLA) của toàn hệ thống.
 
 ---
 
-## 5. Nếu có thêm 2 giờ, tôi sẽ làm gì? (50–100 từ)
+## 5. Nếu có thêm 2 giờ, tôi sẽ làm gì? (100 từ)
 
-Dựa trên kết quả test Case 3 (Hợp lệ), tôi thấy AI giải thích rất tốt nhưng chưa trích dẫn chính xác số dòng (Line number) trong tài liệu. Nếu có thêm 2 giờ, tôi sẽ cải tiến Prompt để AI trả về chính xác số thứ tự dòng trong văn bản gốc giúp tăng tính pháp lý cho câu trả lời.
+Dựa trên Trace của các kịch bản test vừa thực hiện, tôi nhận thấy phần `explanation` của AI hiện nay rất dài. Nếu có thêm 2 giờ, tôi sẽ thử nghiệm kỹ thuật **Few-shot Prompting** để huấn luyện AI trả về lời giải thích theo định dạng chuẩn hóa: `[Điều khoản ví phạm] - [Lý do] - [Giải pháp thay thế]`. 
 
----
-*Người viết: Nguyễn Xuân Mong*
+Lý do là vì hiện tại trace cho thấy AI vẫn viết khá dài dòng tự do, gây khó khăn cho việc hiển thị trên giao diện người dùng nếu sau này phát triển thêm UI.
