@@ -89,9 +89,9 @@ def supervisor_node(state: AgentState) -> AgentState:
     task = state["task"].lower()
     state["history"].append(f"[supervisor] received task: {state['task'][:80]}")
 
-    policy_keywords = ["hoàn tiền", "refund", "flash sale", "license", "cấp quyền", "access", "level 3"]
+    policy_keywords = ["hoàn tiền", "refund", "flash sale", "license", "cấp quyền", "access", "level 3", "emergency"]
     retrieval_keywords = ["p1", "sla", "ticket", "escalation", "sự cố", "remote", "probation"]
-    risk_keywords = ["emergency", "khẩn cấp", "2am", "không rõ", "err-"]
+    risk_keywords = ["khẩn cấp", "2am", "không rõ", "err-"]
 
     matched_policy = [kw for kw in policy_keywords if kw in task]
     matched_retrieval = [kw for kw in retrieval_keywords if kw in task]
