@@ -4,7 +4,7 @@
 **Thành viên:**
 | Tên | Vai trò | Email |
 |-----|---------|-------|
-| Trương Đặng Gia Huy | Supervisor Owner | (trống) |
+| Trương Đặng Gia Huy | Supervisor Owner | 26ai.huytdg@vinuni.edu.vn |
 | Nguyễn Ngọc Thắng | Worker Owner (Retrieval) | (trống) |
 | Nguyễn Xuân Mong | Worker Owner (Policy Tool & AI) | xuanmongng@gmail.com |
 | Trần Minh Toàn | Worker Owner (Synthesis) | tranminhtoan140601@gmail.com |
